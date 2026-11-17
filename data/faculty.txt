@@ -1,6 +1,7 @@
-5
-DS01|Mandar|CSDS|0|17|PAS|1111111|
-DS02|verma|CSDS|0|16|DSA|1111111|
-DS03|poonam|CSDS|0|12|web development|1111111|
-IT01|rajat|IT|1|13|Electronics|1111111|
-DS04|sayali|CSDS|0|18|OOPS|1111111|
+6
+F01|Prof. R. Sharma|CSDS|0|16|Engg Math, Cloud Computing|1111111|
+F02|Prof. A. Verma|CSDS|0|16|C Programming, Data Structures|1111111|
+F03|Prof. S. Patil|CSDS|0|14|Computer Org, DBMS|1111111|
+F04|Prof. N. Kulkarni|IT|1|10|Web Tech|1111111|0:0;0:1;2:2;
+F05|Prof. P. Deshmukh|AI&DS|1|8|AI & ML|1111111|1:3;4:0;
+F06|Prof. M. Kadam|CSDS|0|14|Operating Systems|1111111|

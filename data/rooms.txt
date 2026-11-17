@@ -1,5 +1,7 @@
-4
-DS01|abcd|Classroom|Standard|60|0|1
-DS02|abcd|Classroom|Standard|60|0|1
-DS03|abcd|Classroom|Standard|60|0|1
-DS01|abcd|Laboratory|Standard|60|1|1
+6
+R101|Room 101|Classroom|Smart Board, Projector|60|0|1
+R102|Room 102|Classroom|Audio System, Projector|60|0|1
+R103|Room 103|Classroom|Standard AV|60|0|1
+L201|Software Lab 1|Laboratory|30 High-End Workstations|30|1|1
+L202|Computing Lab 2|Laboratory|30 GPU PCs, Dual Monitors|30|1|1
+L203|IoT & Embedded Lab|Laboratory|Microcontroller Testbenches|25|1|1

@@ -77,19 +77,27 @@ function setupEventListeners() {
     document.getElementById('formAddFaculty').addEventListener('submit', async (e) => {
         e.preventDefault();
         const isEdit = document.getElementById('facEditMode').value === '1';
+        const selectedDays = [];
+        document.querySelectorAll('#facAvailDaysGroup input:checked').forEach(cb => selectedDays.push(parseInt(cb.value, 10)));
         const payload = {
-            id: document.getElementById('facId').value,
-            name: document.getElementById('facName').value,
-            dept: document.getElementById('facDept').value,
-            qualifications: document.getElementById('facQualifications').value,
+            origId: document.getElementById('facOrigId').value || document.getElementById('facId').value,
+            id: document.getElementById('facId').value.trim(),
+            name: document.getElementById('facName').value.trim(),
+            dept: document.getElementById('facDept').value.trim(),
+            qualifications: document.getElementById('facQualifications').value.trim(),
             isOutside: parseInt(document.getElementById('facIsOutside').value, 10),
-            maxHours: parseInt(document.getElementById('facMaxHours').value, 10)
+            maxHours: parseInt(document.getElementById('facMaxHours').value, 10),
+            days: selectedDays
         };
         const method = isEdit ? 'PUT' : 'POST';
         const msg = isEdit ? 'Faculty member updated' : 'Faculty member registered';
-        await postData('/api/faculty', payload, method, msg);
-        resetFacultyForm();
-        loadFaculty();
+        const ok = await postData('/api/faculty', payload, method, msg);
+        if (ok) {
+            resetFacultyForm();
+            await loadFaculty();
+            await loadSubjects();
+            await loadTimetable(appState.activeDivision);
+        }
     });
     document.getElementById('btnCancelFacultyEdit').addEventListener('click', resetFacultyForm);
 
@@ -98,8 +106,9 @@ function setupEventListeners() {
         e.preventDefault();
         const isEdit = document.getElementById('subEditMode').value === '1';
         const payload = {
-            id: document.getElementById('subId').value,
-            name: document.getElementById('subName').value,
+            origId: document.getElementById('subOrigId').value || document.getElementById('subId').value,
+            id: document.getElementById('subId').value.trim(),
+            name: document.getElementById('subName').value.trim(),
             year: parseInt(document.getElementById('subYear').value, 10),
             facIdx: parseInt(document.getElementById('subFaculty').value, 10),
             practicalFacIdx: parseInt(document.getElementById('subPracticalFaculty').value, 10),
@@ -111,9 +120,12 @@ function setupEventListeners() {
         };
         const method = isEdit ? 'PUT' : 'POST';
         const msg = isEdit ? 'Subject curriculum updated' : 'Academic subject added';
-        await postData('/api/subjects', payload, method, msg);
-        resetSubjectForm();
-        loadSubjects();
+        const ok = await postData('/api/subjects', payload, method, msg);
+        if (ok) {
+            resetSubjectForm();
+            await loadSubjects();
+            await loadTimetable(appState.activeDivision);
+        }
     });
     document.getElementById('btnCancelSubEdit').addEventListener('click', resetSubjectForm);
 
@@ -132,19 +144,23 @@ function setupEventListeners() {
         e.preventDefault();
         const isEdit = document.getElementById('roomEditMode').value === '1';
         const payload = {
-            id: document.getElementById('roomId').value,
-            name: document.getElementById('roomName').value,
+            origId: document.getElementById('roomOrigId').value || document.getElementById('roomId').value,
+            id: document.getElementById('roomId').value.trim(),
+            name: document.getElementById('roomName').value.trim(),
             type: document.getElementById('roomIsLab').value === '1' ? 'Laboratory' : 'Classroom',
             isLab: parseInt(document.getElementById('roomIsLab').value, 10),
             capacity: parseInt(document.getElementById('roomCapacity').value, 10),
-            equipment: document.getElementById('roomEquipment').value,
+            equipment: document.getElementById('roomEquipment').value.trim(),
             isAvailable: parseInt(document.getElementById('roomIsAvailable').value, 10)
         };
         const method = isEdit ? 'PUT' : 'POST';
         const msg = isEdit ? 'Facility details updated' : 'Facility registered';
-        await postData('/api/rooms', payload, method, msg);
-        resetRoomForm();
-        loadRooms();
+        const ok = await postData('/api/rooms', payload, method, msg);
+        if (ok) {
+            resetRoomForm();
+            await loadRooms();
+            await loadTimetable(appState.activeDivision);
+        }
     });
     document.getElementById('btnCancelRoomEdit').addEventListener('click', resetRoomForm);
 
@@ -483,22 +499,35 @@ function editFaculty(id) {
     if (!f) return;
     document.getElementById('facultyFormTitle').textContent = `Edit Faculty Member (${f.id})`;
     document.getElementById('facEditMode').value = '1';
+    document.getElementById('facOrigId').value = f.id;
     document.getElementById('facId').value = f.id;
-    document.getElementById('facId').readOnly = true;
+    document.getElementById('facId').readOnly = false;
     document.getElementById('facName').value = f.name;
     document.getElementById('facDept').value = f.dept;
     document.getElementById('facQualifications').value = f.qualifications || '';
     document.getElementById('facIsOutside').value = f.isOutside ? '1' : '0';
     document.getElementById('facMaxHours').value = f.maxHours;
+
+    // Populate day checkboxes
+    document.querySelectorAll('.fac-day-cb').forEach((cb, idx) => {
+        cb.checked = (f.availDays && f.availDays[idx] !== undefined) ? !!f.availDays[idx] : true;
+    });
+
+    document.getElementById('btnFacultySubmit').textContent = 'Update Faculty Member';
     document.getElementById('btnCancelFacultyEdit').classList.remove('hidden');
+    document.getElementById('formAddFaculty').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    document.getElementById('facName').focus();
 }
 
 function resetFacultyForm() {
     document.getElementById('formAddFaculty').reset();
     document.getElementById('facultyFormTitle').textContent = 'Add Faculty Member';
     document.getElementById('facEditMode').value = '0';
+    document.getElementById('facOrigId').value = '';
     document.getElementById('facId').readOnly = false;
+    document.getElementById('btnFacultySubmit').textContent = 'Save Faculty';
     document.getElementById('btnCancelFacultyEdit').classList.add('hidden');
+    document.querySelectorAll('.fac-day-cb').forEach(cb => { cb.checked = parseInt(cb.value, 10) < 5; });
 }
 
 async function deleteFaculty(id) {
@@ -546,8 +575,9 @@ function editSubject(id) {
     if (!s) return;
     document.getElementById('subjectFormTitle').textContent = `Edit Subject (${s.id})`;
     document.getElementById('subEditMode').value = '1';
+    document.getElementById('subOrigId').value = s.id;
     document.getElementById('subId').value = s.id;
-    document.getElementById('subId').readOnly = true;
+    document.getElementById('subId').readOnly = false;
     document.getElementById('subName').value = s.name;
     document.getElementById('subYear').value = s.year;
     document.getElementById('subFaculty').value = s.facIdx;
@@ -557,14 +587,19 @@ function editSubject(id) {
     document.getElementById('subPracticals').value = s.practicalCount;
     document.getElementById('subPracticalDuration').value = s.practicalDuration || 120;
     document.getElementById('subRoomTypeReq').value = s.roomTypeReq;
+    document.getElementById('btnSubjectSubmit').textContent = 'Update Subject';
     document.getElementById('btnCancelSubEdit').classList.remove('hidden');
+    document.getElementById('formAddSubject').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    document.getElementById('subName').focus();
 }
 
 function resetSubjectForm() {
     document.getElementById('formAddSubject').reset();
     document.getElementById('subjectFormTitle').textContent = 'Add / Edit Academic Subject';
     document.getElementById('subEditMode').value = '0';
+    document.getElementById('subOrigId').value = '';
     document.getElementById('subId').readOnly = false;
+    document.getElementById('btnSubjectSubmit').textContent = 'Save Subject';
     document.getElementById('btnCancelSubEdit').classList.add('hidden');
 }
 
@@ -624,21 +659,27 @@ function editRoom(id) {
     if (!r) return;
     document.getElementById('roomFormTitle').textContent = `Edit Facility (${r.id})`;
     document.getElementById('roomEditMode').value = '1';
+    document.getElementById('roomOrigId').value = r.id;
     document.getElementById('roomId').value = r.id;
-    document.getElementById('roomId').readOnly = true;
+    document.getElementById('roomId').readOnly = false;
     document.getElementById('roomName').value = r.name;
     document.getElementById('roomIsLab').value = r.isLab ? '1' : '0';
     document.getElementById('roomCapacity').value = r.capacity;
     document.getElementById('roomEquipment').value = r.equipment || '';
     document.getElementById('roomIsAvailable').value = r.isAvailable ? '1' : '0';
+    document.getElementById('btnRoomSubmit').textContent = 'Update Facility';
     document.getElementById('btnCancelRoomEdit').classList.remove('hidden');
+    document.getElementById('formAddRoom').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    document.getElementById('roomName').focus();
 }
 
 function resetRoomForm() {
     document.getElementById('formAddRoom').reset();
     document.getElementById('roomFormTitle').textContent = 'Add / Edit Room or Laboratory';
     document.getElementById('roomEditMode').value = '0';
+    document.getElementById('roomOrigId').value = '';
     document.getElementById('roomId').readOnly = false;
+    document.getElementById('btnRoomSubmit').textContent = 'Save Facility';
     document.getElementById('btnCancelRoomEdit').classList.add('hidden');
 }
 

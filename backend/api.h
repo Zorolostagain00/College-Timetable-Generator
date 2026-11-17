@@ -83,18 +83,50 @@ inline string handleFaculty(const string& method, const string& body) {
         string qual = getJsonStr(body, "qualifications");
         int out = getJsonInt(body, "isOutside", 0), mh = getJsonInt(body, "maxHours", 16);
         if (!id.empty() && !name.empty() && numFac < MAX_FAC) {
+            for (int i = 0; i < numFac; i++) {
+                if (faculties[i].id == id) return "{\"status\":\"error\",\"message\":\"Faculty ID '" + id + "' is already registered.\"}";
+            }
             faculties[numFac] = Faculty(id, name, dep, out == 1, mh, 0, qual);
-            facHash.insert(id, numFac);
-            numFac++; saveData();
+            size_t dPos = body.find("days");
+            if (dPos != string::npos) {
+                size_t bStart = body.find('[', dPos), bEnd = body.find(']', bStart);
+                if (bStart != string::npos && bEnd != string::npos) {
+                    for (int d = 0; d < MAX_DAYS; d++) faculties[numFac].availDays[d] = false;
+                    string arr = body.substr(bStart + 1, bEnd - (bStart + 1));
+                    stringstream ss(arr); string dVal;
+                    while (getline(ss, dVal, ',')) {
+                        int dayNum = atoi(dVal.c_str());
+                        if (dayNum >= 0 && dayNum < MAX_DAYS) faculties[numFac].availDays[dayNum] = true;
+                    }
+                }
+            }
+            numFac++;
+            facHash = FacultyHash();
+            for (int i = 0; i < numFac; i++) facHash.insert(faculties[i].id, i);
+            buildFacultyGraph();
+            saveData();
             return "{\"status\":\"success\",\"message\":\"Faculty member registered\"}";
         }
-        return "{\"status\":\"error\",\"message\":\"Unable to register faculty\"}";
+        return "{\"status\":\"error\",\"message\":\"Unable to register faculty: Name and ID required\"}";
     }
     if (method == "PUT") {
+        string origId = getJsonStr(body, "origId");
         string id = getJsonStr(body, "id");
-        int idx = facHash.search(id);
-        if (idx == -1) idx = findFaculty(faculties, numFac, id);
+        if (origId.empty()) origId = id;
+        int idx = -1;
+        for (int i = 0; i < numFac; i++) if (faculties[i].id == origId) { idx = i; break; }
+        if (idx == -1 && !id.empty()) {
+            for (int i = 0; i < numFac; i++) if (faculties[i].id == id) { idx = i; break; }
+        }
         if (idx >= 0 && idx < numFac) {
+            if (!id.empty() && id != faculties[idx].id) {
+                for (int i = 0; i < numFac; i++) {
+                    if (i != idx && faculties[i].id == id) {
+                        return "{\"status\":\"error\",\"message\":\"Faculty ID '" + id + "' is already in use.\"}";
+                    }
+                }
+                faculties[idx].id = id;
+            }
             string name = getJsonStr(body, "name"), dep = getJsonStr(body, "dept"), qual = getJsonStr(body, "qualifications");
             int out = getJsonInt(body, "isOutside", faculties[idx].isOutside ? 1 : 0);
             int mh = getJsonInt(body, "maxHours", faculties[idx].maxHours);
@@ -103,6 +135,23 @@ inline string handleFaculty(const string& method, const string& body) {
             faculties[idx].qualifications = qual;
             faculties[idx].isOutside = (out == 1);
             faculties[idx].maxHours = mh;
+
+            size_t dPos = body.find("days");
+            if (dPos != string::npos) {
+                size_t bStart = body.find('[', dPos), bEnd = body.find(']', bStart);
+                if (bStart != string::npos && bEnd != string::npos) {
+                    for (int d = 0; d < MAX_DAYS; d++) faculties[idx].availDays[d] = false;
+                    string arr = body.substr(bStart + 1, bEnd - (bStart + 1));
+                    stringstream ss(arr); string dVal;
+                    while (getline(ss, dVal, ',')) {
+                        int dayNum = atoi(dVal.c_str());
+                        if (dayNum >= 0 && dayNum < MAX_DAYS) faculties[idx].availDays[dayNum] = true;
+                    }
+                }
+            }
+            facHash = FacultyHash();
+            for (int i = 0; i < numFac; i++) facHash.insert(faculties[i].id, i);
+            buildFacultyGraph();
             saveData();
             return "{\"status\":\"success\",\"message\":\"Faculty updated successfully\"}";
         }
@@ -110,8 +159,8 @@ inline string handleFaculty(const string& method, const string& body) {
     }
     if (method == "DELETE") {
         string id = getJsonStr(body, "id");
-        int idx = facHash.search(id);
-        if (idx == -1) idx = findFaculty(faculties, numFac, id);
+        int idx = -1;
+        for (int i = 0; i < numFac; i++) if (faculties[i].id == id) { idx = i; break; }
         if (idx < 0 || idx >= numFac) return "{\"status\":\"error\",\"message\":\"Faculty not found\"}";
 
         // Dependency check 1: Assigned to subjects
@@ -134,7 +183,6 @@ inline string handleFaculty(const string& method, const string& body) {
         }
 
         // Safe delete: shift array and update indices
-        facHash.remove(faculties[idx].id);
         for (int i = idx; i < numFac - 1; i++) faculties[i] = faculties[i + 1];
         numFac--;
         for (int s = 0; s < numSubs; s++) {
@@ -148,6 +196,9 @@ inline string handleFaculty(const string& method, const string& body) {
                 }
             }
         }
+        facHash = FacultyHash();
+        for (int i = 0; i < numFac; i++) facHash.insert(faculties[i].id, i);
+        buildFacultyGraph();
         saveData();
         return "{\"status\":\"success\",\"message\":\"Faculty deleted successfully\"}";
     }
@@ -189,23 +240,45 @@ inline string handleSubjects(const string& method, const string& body) {
         return "{\"status\":\"error\",\"message\":\"Unable to add subject\"}";
     }
     if (method == "PUT") {
+        string origId = getJsonStr(body, "origId");
         string id = getJsonStr(body, "id");
+        if (origId.empty()) origId = id;
         int idx = -1;
-        for (int i = 0; i < numSubs; i++) if (subjects[i].id == id) { idx = i; break; }
-        if (idx >= 0) {
+        for (int i = 0; i < numSubs; i++) if (subjects[i].id == origId) { idx = i; break; }
+        if (idx == -1 && !id.empty()) {
+            for (int i = 0; i < numSubs; i++) if (subjects[i].id == id) { idx = i; break; }
+        }
+        if (idx >= 0 && idx < numSubs) {
+            if (!id.empty() && id != subjects[idx].id) {
+                for (int i = 0; i < numSubs; i++) {
+                    if (i != idx && subjects[i].id == id) {
+                        return "{\"status\":\"error\",\"message\":\"Subject ID '" + id + "' is already in use.\"}";
+                    }
+                }
+                subjects[idx].id = id;
+            }
             string name = getJsonStr(body, "name"), rt = getJsonStr(body, "roomTypeReq");
             int yr = getJsonInt(body, "year", subjects[idx].yearId);
             int fi = getJsonInt(body, "facIdx", subjects[idx].facIdx);
             int pfi = getJsonInt(body, "practicalFacIdx", subjects[idx].practicalFacIdx);
             int wl = getJsonInt(body, "weeklyLec", subjects[idx].weeklyLec);
+            int ld = getJsonInt(body, "lecDuration", subjects[idx].lecDuration);
             int pc = getJsonInt(body, "practicalCount", subjects[idx].practicalCount);
+            int pd = getJsonInt(body, "practicalDuration", subjects[idx].practicalDuration);
 
             if (!name.empty()) subjects[idx].name = name;
-            subjects[idx].yearId = yr; subjects[idx].facIdx = fi; subjects[idx].practicalFacIdx = pfi;
-            subjects[idx].weeklyLec = wl; subjects[idx].practicalCount = pc;
+            subjects[idx].yearId = yr;
+            subjects[idx].facIdx = fi;
+            subjects[idx].practicalFacIdx = pfi;
+            subjects[idx].weeklyLec = wl;
+            subjects[idx].lecDuration = ld;
+            subjects[idx].practicalCount = pc;
+            subjects[idx].practicalDuration = pd;
             if (!rt.empty()) subjects[idx].roomTypeReq = rt;
+
+            buildFacultyGraph();
             saveData();
-            return "{\"status\":\"success\",\"message\":\"Subject updated\"}";
+            return "{\"status\":\"success\",\"message\":\"Subject updated successfully\"}";
         }
         return "{\"status\":\"error\",\"message\":\"Subject not found for update\"}";
     }
@@ -306,10 +379,23 @@ inline string handleRooms(const string& method, const string& body) {
         return "{\"status\":\"error\",\"message\":\"Failed to add room\"}";
     }
     if (method == "PUT") {
+        string origId = getJsonStr(body, "origId");
         string id = getJsonStr(body, "id");
+        if (origId.empty()) origId = id;
         int idx = -1;
-        for (int i = 0; i < numRooms; i++) if (rooms[i].id == id) { idx = i; break; }
-        if (idx >= 0) {
+        for (int i = 0; i < numRooms; i++) if (rooms[i].id == origId) { idx = i; break; }
+        if (idx == -1 && !id.empty()) {
+            for (int i = 0; i < numRooms; i++) if (rooms[i].id == id) { idx = i; break; }
+        }
+        if (idx >= 0 && idx < numRooms) {
+            if (!id.empty() && id != rooms[idx].id) {
+                for (int i = 0; i < numRooms; i++) {
+                    if (i != idx && rooms[i].id == id) {
+                        return "{\"status\":\"error\",\"message\":\"Facility ID '" + id + "' is already in use.\"}";
+                    }
+                }
+                rooms[idx].id = id;
+            }
             string name = getJsonStr(body, "name"), typ = getJsonStr(body, "type"), eq = getJsonStr(body, "equipment");
             int cap = getJsonInt(body, "capacity", rooms[idx].capacity);
             int isL = getJsonInt(body, "isLab", rooms[idx].isLab);
@@ -319,7 +405,7 @@ inline string handleRooms(const string& method, const string& body) {
             if (!eq.empty()) rooms[idx].equipment = eq;
             rooms[idx].capacity = cap; rooms[idx].isLab = isL; rooms[idx].isAvailable = (isAv == 1);
             saveData();
-            return "{\"status\":\"success\",\"message\":\"Room updated\"}";
+            return "{\"status\":\"success\",\"message\":\"Facility updated successfully\"}";
         }
         return "{\"status\":\"error\",\"message\":\"Room not found for update\"}";
     }
@@ -398,6 +484,20 @@ inline string handleBreaks(const string& method, const string& body) {
     ss << "]}"; return ss.str();
 }
 
+inline void recalculateFacultyWorkload() {
+    int intM = atoi(dept.interval.c_str()); if (intM <= 0) intM = 60;
+    for (int f = 0; f < numFac; f++) {
+        faculties[f].currHours = 0;
+        for (int d = 0; d < numDivs; d++) {
+            for (int day = 0; day < dept.numDays; day++) {
+                for (int s = 0; s < dept.numSlots; s++) {
+                    if (grid[d][day][s].facIdx == f) faculties[f].currHours += max(1, intM / 60);
+                }
+            }
+        }
+    }
+}
+
 inline string handleSessionEdit(const string& body) {
     string action = getJsonStr(body, "action");
     int divIdx = getJsonInt(body, "divIdx", 0);
@@ -411,6 +511,7 @@ inline string handleSessionEdit(const string& body) {
         Cell prev = grid[divIdx][day][slot];
         undoStack.push(TimetableEntry{divIdx, day, slot, prev.subIdx, prev.facIdx, prev.roomIdx, prev.isBreak, prev.isManual, prev.label});
         grid[divIdx][day][slot] = Cell();
+        recalculateFacultyWorkload();
         saveData();
         return "{\"status\":\"success\",\"message\":\"Session removed from slot\"}";
     }
@@ -422,6 +523,7 @@ inline string handleSessionEdit(const string& body) {
         grid[divIdx][day][slot].facIdx = facIdx;
         grid[divIdx][day][slot].roomIdx = roomIdx;
         grid[divIdx][day][slot].isManual = 1;
+        recalculateFacultyWorkload();
         saveData();
         return "{\"status\":\"success\",\"message\":\"Session updated successfully\"}";
     }
@@ -441,6 +543,7 @@ inline string handleSessionEdit(const string& body) {
         grid[divIdx][newDay][newSlot] = current;
         grid[divIdx][newDay][newSlot].isManual = 1;
         grid[divIdx][day][slot] = Cell();
+        recalculateFacultyWorkload();
         saveData();
         return "{\"status\":\"success\",\"message\":\"Session rescheduled successfully\"}";
     }
@@ -449,6 +552,7 @@ inline string handleSessionEdit(const string& body) {
         TimetableEntry e = undoStack.pop();
         if (e.divIdx >= 0 && e.divIdx < numDivs && e.day >= 0 && e.day < dept.numDays && e.slot >= 0 && e.slot < dept.numSlots) {
             grid[e.divIdx][e.day][e.slot] = Cell(e.subIdx, e.facIdx, e.roomIdx, e.isBreak, e.label, e.isManual);
+            recalculateFacultyWorkload();
             saveData();
             return "{\"status\":\"success\",\"message\":\"Undo operation applied successfully\"}";
         }
