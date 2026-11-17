@@ -242,7 +242,8 @@ function setupEventListeners() {
         const result = await res.json();
         if (result.status === 'success') {
             showToast('Timetable has been completely reset!', 'success');
-            document.getElementById('statusLastGenBadge').textContent = `Last Gen: ${result.lastGenerated || 'Reset'}`;
+            const lastGenBadge = document.getElementById('statusLastGenBadge');
+            if (lastGenBadge) lastGenBadge.textContent = `Last Gen: ${result.lastGenerated || 'Reset'}`;
             const resContainer = document.getElementById('genResultsContainer');
             if (resContainer) resContainer.classList.add('hidden');
             await loadTimetable(appState.activeDivision);
@@ -348,7 +349,8 @@ async function fetchInitialData() {
         document.getElementById('cfgStartTime').value = appState.dept.startTime || '09:00';
         document.getElementById('cfgEndTime').value = appState.dept.endTime || '16:00';
         document.getElementById('cfgInterval').value = appState.dept.interval || '60';
-        document.getElementById('statusLastGenBadge').textContent = `Last Gen: ${appState.dept.lastGenerated || 'Ready'}`;
+        const lastGenBadge = document.getElementById('statusLastGenBadge');
+        if (lastGenBadge) lastGenBadge.textContent = `Last Gen: ${appState.dept.lastGenerated || 'Ready'}`;
 
         // Populate Division Select dropdown
         const divSel = document.getElementById('divSelect');
@@ -795,7 +797,8 @@ async function executeGenerator() {
     document.getElementById('resScheduledCount').textContent = result.scheduledCount || 0;
     document.getElementById('resUnscheduledCount').textContent = result.unscheduledCount || 0;
     document.getElementById('resTimestamp').textContent = result.lastGenerated || 'Just now';
-    document.getElementById('statusLastGenBadge').textContent = `Last Gen: ${result.lastGenerated || 'Ready'}`;
+    const lastGenBadge = document.getElementById('statusLastGenBadge');
+    if (lastGenBadge) lastGenBadge.textContent = `Last Gen: ${result.lastGenerated || 'Ready'}`;
 
     const unschedSection = document.getElementById('unscheduledSection');
     const unschedTable = document.querySelector('#unscheduledTable tbody');

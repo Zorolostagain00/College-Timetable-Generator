@@ -24,7 +24,6 @@
                 </div>
                 <div class="brand-info">
                     <h2>DeptFlow</h2>
-                    <span>Academic Scheduler V2</span>
                 </div>
             </div>
 
@@ -64,10 +63,7 @@
             </nav>
 
             <div class="sidebar-footer">
-                <div class="badge-status">
-                    <span class="dot"></span> C++ DSA Engine Active
-                </div>
-                <button class="btn btn-sm btn-outline" id="btnResetAllSystem" style="color:#b91c1c; border-color:#fca5a5; width:100%; margin-top:10px;">
+                <button class="btn btn-sm btn-outline" id="btnResetAllSystem" style="color:#b91c1c; border-color:#fca5a5; width:100%;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle; margin-right:4px;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
                     <span>Reset All (Clear Data)</span>
                 </button>
@@ -83,10 +79,6 @@
                     <p id="deptSubtitle">Department of Computer Science & Design (CSDS)</p>
                 </div>
                 <div class="header-actions">
-                    <div class="status-badge-group">
-                        <span class="status-pill green" id="statusEngineReady">Engine Ready</span>
-                        <span class="status-pill blue" id="statusLastGenBadge">Last Gen: Ready</span>
-                    </div>
                     <div class="div-selector-wrap">
                         <label for="divSelect">Active Division:</label>
                         <select id="divSelect" class="form-select"></select>
@@ -205,11 +197,10 @@
                             <input type="text" id="cfgDeptName" class="form-input" required>
                         </div>
                         <div class="form-group">
-                            <label>Slot Interval (Granularity)</label>
+                            <label>Slot Interval</label>
                             <select id="cfgInterval" class="form-select">
-                                <option value="60">60 Minutes (Standard)</option>
-                                <option value="30">30 Minutes (Fine-Grained)</option>
-                                <option value="15">15 Minutes (High-Precision)</option>
+                                <option value="60">60 Minutes</option>
+                                <option value="30">30 Minutes</option>
                             </select>
                         </div>
                         <div class="form-group">
