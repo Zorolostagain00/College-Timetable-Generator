@@ -1,0 +1,228 @@
+# DeptFlow V2: Complete DSA Deep Dive Guide
+
+This guide provides a comprehensive breakdown of all **8 custom Data Structures and Algorithms (DSA)** implemented in DeptFlow V2. For each DSA, it details the **problem it solves**, **how it solves it**, the **theoretical computer science concepts**, and its **exact practical role in the codebase**.
+
+---
+
+## 1. Max-Heap (Priority Queue)
+
+### A. What Problem It Solves
+
+In academic timetable generation, scheduling is an **NP-hard constraint satisfaction problem**. If you greedily schedule flexible, easy sessions first (e.g. 1-hour departmental lectures), they occupy the best slots throughout the week. Later, when the algorithm attempts to schedule **constrained 2-hour practical sessions** or sessions for **visiting faculty** with limited availability, no consecutive free slots and laboratories remain. This leads to frequent scheduling failures and unscheduled classes.
+
+### B. How It Solves It
+
+DeptFlow uses a **Max-Heap Priority Queue** to prioritize sessions based on their **constraint rigidity**:
+
+1. **Visiting Faculty Practicals (Priority 110)**: 2-hour lab sessions + external professor. (Highest conflict risk)
+2. **Departmental Practicals (Priority 100)**: 2-hour lab blocks requiring specialized rooms.
+3. **Visiting Faculty Theory (Priority 55)**: 1-hour lectures with limited professor availability.
+4. **Departmental Theory (Priority 30)**: Flexible 1-hour lectures. (Lowest conflict risk)
+
+By popping sessions from the heap, the engine places the most constrained sessions first when the timetable grid is empty, ensuring that labs and visiting slots are locked in before simple lectures fill the remaining gaps.
+
+### C. Theoretical Concepts Used
+
+- **Complete Binary Tree in a 1D Array**: Represented compactly without node pointers:
+  - Left child: $\text{left}(i) = 2i + 1$
+  - Right child: $\text{right}(i) = 2i + 2$
+  - Parent: $\text{parent}(i) = \lfloor (i - 1) / 2 \rfloor$
+- **Max-Heap Invariant**: For every node $i$ other than root, $\text{heap}[\text{parent}(i)].\text{priority} \ge \text{heap}[i].\text{priority}$.
+- **Sift-Up (`siftUp`)**: When pushing a session, place it at the end and bubble it up along parent pointers in $\mathcal{O}(\log N)$ time.
+- **Sift-Down (`siftDown`)**: When popping the root, replace it with the last element and bubble it down to its correct position in $\mathcal{O}(\log N)$ time.
+- **Greedy Approximation Algorithm**: Uses prioritized ordering to reach a conflict-free solution without exponential backtracking.
+
+### D. Practical Role in the Code
+
+- **File**: `backend/dsa.h` (`class MaxHeap`), `backend/scheduler.h` (`generateTimetable()`).
+- **Usage**: In `scheduler.h`, all sessions across all active divisions are built and pushed into `MaxHeap heap`. A `while (!heap.empty())` loop pops sessions in descending order of difficulty and feeds them into the 7-constraint validator.
+
+---
+
+## 2. Adjacency Matrix Graph + BFS (Breadth-First Search)
+
+### A. What Problem It Solves
+
+In a multi-year academic department, divisions do not exist in isolation. If an administrator reassigns a professor or reschedules a class in division `FE-A`, which other divisions will feel the ripple effect? Without graph modeling, the administration cannot detect conflict ripple paths across academic years.
+
+### B. How It Solves It
+
+DeptFlow models the entire department as an **Undirected Graph**:
+
+- **Vertices ($V$)**: Academic Divisions (e.g., `FE-A`, `FE-B`, `SE-A`, `TE-A`, etc.).
+- **Edges ($E$)**: An edge exists between Division $u$ and Division $v$ if they **share at least one faculty member**.
+
+When evaluating division impact:
+
+- **Direct Dependency**: Divisions directly connected by an edge ($adj[u][v] == 1$) share the exact same teacher; any schedule shift directly impacts both.
+- **Indirect Dependency**: Divisions reachable via a path of length $\ge 2$ through **BFS (Breadth-First Search)** represent secondary ripple effects (e.g. `FE-A` shares a teacher with `SE-A`, and `SE-A` shares another teacher with `TE-A`).
+
+### C. Theoretical Concepts Used
+
+- **Adjacency Matrix**: A 2D boolean array `adj[MAX_DIVS][MAX_DIVS]` where cell $(u, v) = 1$ denotes an edge. Allows $\mathcal{O}(1)$ edge lookup.
+- **Breadth-First Search (BFS)**: Level-order graph traversal using a manual **FIFO Queue** (`q[MAX_DIVS]`). Explores all immediate neighbors (distance 1) before exploring distance 2 neighbors.
+- **Visited Array**: Prevents infinite loops in cyclic graphs.
+- **Time Complexity**: $\mathcal{O}(V^2)$ traversal for an adjacency matrix representation.
+
+### D. Practical Role in the Code
+
+- **File**: `backend/dsa.h` (`class Graph`), `backend/scheduler.h` (`buildFacultyGraph()`), `backend/api.h` (`handleReports()`).
+- **Usage**: `buildFacultyGraph()` scans all subjects and constructs edges. When the UI queries `/api/reports`, BFS runs to return two distinct lists to the dashboard: `directDependencies` and `indirectDependencies`.
+
+---
+
+## 3. Separate Chaining Hash Table (`FacultyHash`)
+
+### A. What Problem It Solves
+
+Faculty members are identified by string IDs (e.g., `"F01"`, `"DS02"`, `"IT05"`). During timetable generation and constraint checking, the system checks faculty records thousands of times. Performing a linear scan over an array for every lookup would take $\mathcal{O}(N)$ per check, causing severe latency.
+
+### B. How It Solves It
+
+DeptFlow implements a **Separate Chaining Hash Table** with 17 buckets. It transforms the string ID into an integer index $0 \dots 16$. When collisions occur (two IDs hashing to the same bucket), the items are stored in a **Singly Linked List** of `HashNode` objects at that bucket.
+
+### C. Theoretical Concepts Used
+
+- **Polynomial Rolling Hash**: Treats the characters of the string as coefficients of a polynomial evaluated at base 31:
+  $$h(s) = \left( \sum_{i=0}^{k-1} s[i] \cdot 31^{k-1-i} \right) \pmod{17}$$
+  Implemented via Horner's rule: `h = (h * 31 + c) % 17`.
+- **Prime Modulus**: Modulo by prime 17 ensures uniform distribution and minimizes clustering.
+- **Separate Chaining (Closed Addressing)**: Handles collisions gracefully by storing colliding elements in linked lists outside the primary array.
+- **Head Insertion ($\mathcal{O}(1)$)**: New nodes are prepended to the head of the bucket linked list in $\mathcal{O}(1)$ time.
+
+### D. Practical Role in the Code
+
+- **File**: `backend/dsa.h` (`class FacultyHash`), `backend/storage.h`, `backend/api.h`.
+- **Usage**: Initialized globally as `facHash`. Every time a faculty member is loaded or added, `facHash.insert(id, index)` stores the mapping. During API updates or searches, `facHash.search(id)` retrieves the index in constant $\mathcal{O}(1)$ average time.
+
+---
+
+## 4. Singly Linked List (`CommitNode*`)
+
+### A. What Problem It Solves
+
+Visiting faculty from other departments or guest lecturers have external obligations (e.g., teaching in their home department on Monday slots 0 & 1, Wednesday slot 2). Fixed-size arrays for commitments would waste memory for full-time internal professors who have zero external commitments, and would limit visiting faculty with many commitments.
+
+### B. How It Solves It
+
+DeptFlow attaches a dynamic **Singly Linked List** (`CommitNode* commitments`) to each `Faculty` struct. Full-time faculty have `commitments = nullptr` (0 extra memory). Visiting faculty allocate nodes dynamically only for the specific slots they are unavailable.
+
+### C. Theoretical Concepts Used
+
+- **Dynamic Node Allocation**: Memory allocated at runtime using `new CommitNode(day, slot, next)`.
+- **Pointer Traversal**: Single-direction traversal via `c = c->next` until `c == nullptr`.
+- **Space Efficiency**: Memory consumption is strictly proportional to the number of commitments: $\mathcal{O}(K)$ where $K$ is the number of commitments.
+
+### D. Practical Role in the Code
+
+- **File**: `backend/models.h` (`struct CommitNode`), `backend/scheduler.h` (`checkSlotFreeInGrid()`), `backend/storage.h`.
+- **Usage**: In `scheduler.h` (Constraint 6), during slot evaluation:
+  ```cpp
+  for (CommitNode* c = faculties[facIdx].commitments; c; c = c->next) {
+      if (c->day == day && c->slot == s) return false; // Clash with home department!
+  }
+  ```
+
+---
+
+## 5. Undo Stack (`UndoStack`)
+
+### A. What Problem It Solves
+
+The interactive web UI allows administrators to manually edit, move, or delete a scheduled session card in the grid. If an administrator accidentally makes a mistake, regenerating the entire department timetable would wipe out all previous manual modifications.
+
+### B. How It Solves It
+
+DeptFlow implements a **LIFO (Last-In, First-Out) Undo Stack**. Before any manual modification is applied to the 3D grid, the previous state of the cell is captured as a `TimetableEntry` snapshot and pushed onto `UndoStack`. Clicking "Undo" pops the top entry and restores the previous cell state instantly in $\mathcal{O}(1)$ time.
+
+### C. Theoretical Concepts Used
+
+- **LIFO Principle**: The most recent operation is the first one reverted.
+- **Array-based Stack**: Implemented with a fixed buffer `data[MAX_SESS]` and a pointer `topIdx`.
+- **Push & Pop Mechanics**:
+  - Push: `data[++topIdx] = entry` in $\mathcal{O}(1)$
+  - Pop: `return data[topIdx--]` in $\mathcal{O}(1)$
+- **Memento Pattern**: Captures internal state without exposing the entire grid to full cloning.
+
+### D. Practical Role in the Code
+
+- **File**: `backend/dsa.h` (`class UndoStack`), `backend/api.h` (`handleSessionEdit()`, `handleResetTimetable()`).
+- **Usage**: In `handleSessionEdit()`, before changing `grid[d][day][slot]`, the old entry is pushed:
+  ```cpp
+  undoStack.push(TimetableEntry{divIdx, day, slot, oldCell.subIdx, oldCell.facIdx, oldCell.roomIdx, ...});
+  ```
+  When the user calls `POST /api/timetable/reset` with `"mode": "undo"`, the top entry is popped and restored.
+
+---
+
+## 6. Insertion Sort (`insertionSortSessions`)
+
+### A. What Problem It Solves
+
+When extracting sessions for a division or generating analytical reports, records can become disordered from multiple edits, breaks, and allocations. The browser timetable requires sessions to be ordered chronologically by **Day** and then by **Time Slot**.
+
+### B. How It Solves It
+
+DeptFlow uses an in-place **Insertion Sort** with a compound comparison key. It sorts the sessions directly in memory by comparing `arr[j].day` first, and `arr[j].slot` second.
+
+### C. Theoretical Concepts Used
+
+- **In-Place Sorting ($\mathcal{O}(1)$ Auxiliary Space)**: Operates directly on the buffer without allocating temporary arrays.
+- **Adaptive Behavior**: If the array is already mostly sorted (common in timetables where days were filled sequentially), Insertion Sort runs in near-linear $\mathcal{O}(N)$ time.
+- **Compound Key Ordering**:
+  ```cpp
+  (arr[j].day > key.day || (arr[j].day == key.day && arr[j].slot > key.slot))
+  ```
+
+### D. Practical Role in the Code
+
+- **File**: `backend/dsa.h` (`insertionSortSessions()`), `backend/api.h`.
+- **Usage**: Used before serializing session lists into JSON for division timetable downloads and report outputs.
+
+---
+
+## 7. Binary Search (`binarySearchSubject`)
+
+### A. What Problem It Solves
+
+Given a subject ID (e.g., `"S201"`), the system needs to quickly look up subject details (weekly lectures, durations, room requirements). When the subject catalog is sorted alphabetically, a linear scan takes $\mathcal{O}(M)$ comparisons.
+
+### B. How It Solves It
+
+DeptFlow uses **Binary Search** to find the target subject in logarithmic $\mathcal{O}(\log M)$ time by repeatedly halving the search range.
+
+### C. Theoretical Concepts Used
+
+- **Divide and Conquer**: Compares the target ID with the middle element `subs[mid].id`.
+- **Search Space Pruning**: Eliminates half of the remaining subjects in each step.
+- **Overflow-Safe Midpoint Calculation**: Uses `mid = low + (high - low) / 2` to prevent integer overflow.
+
+### D. Practical Role in the Code
+
+- **File**: `backend/dsa.h` (`binarySearchSubject()`).
+- **Usage**: Provides sub-millisecond subject validation and metadata retrieval when processing course enrollments and batch updates.
+
+---
+
+## 8. 3D Occupancy Grid (`grid[MAX_DIVS][MAX_DAYS][MAX_SLOTS]`)
+
+### A. What Problem It Solves
+
+An academic timetable is inherently three-dimensional: **Division $\times$ Day $\times$ Time Slot**. If sessions were stored as a flat 1D list, checking whether a specific slot in `SE-A` on Tuesday at 10:30 is occupied would require iterating through every scheduled class in the college ($\mathcal{O}(K)$ for every check). During generation, this would cause millions of iterations.
+
+### B. How It Solves It
+
+DeptFlow implements a direct **3D Occupancy Grid**:
+$$\text{grid}[D][W][S]$$
+where $D$ is Division Index, $W$ is Day of Week, and $S$ is Time Slot. Any cell is accessed directly in $\mathcal{O}(1)$ time.
+
+### C. Theoretical Concepts Used
+
+- **Direct Spatial Addressing**: Directly computes the memory offset using row-major layout:
+  $$\text{Offset} = (d \times \text{MAX\_DAYS} \times \text{MAX\_SLOTS}) + (w \times \text{MAX\_SLOTS}) + s$$
+- **Spatial Indexing**: Gives instantaneous $\mathcal{O}(1)$ lookup, collision check, and assignment without searching.
+
+### D. Practical Role in the Code
+
+- **File**: `backend/models.h` (`struct Cell grid[MAX_DIVS][MAX_DAYS][MAX_SLOTS]`), `backend/scheduler.h`, `backend/api.h`.
+- **Usage**: The single source of truth for all scheduled classes. Every constraint check, timetable render, and manual modification reads from and writes to this 3D grid.
