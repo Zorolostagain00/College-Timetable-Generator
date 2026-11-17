@@ -1,6 +1,1 @@
-5
-DS001|Probability|1|0|0|3|60|1|120|Classroom|0|
-DS002|OOPS|1|3|4|3|60|1|120|Classroom|0|
-DS001|Web D|1|2|2|4|60|1|120|Laboratory|0|
-DS101|Probability|2|0|1|4|60|3|120|Classroom|0|
-DS102|C++|2|4|4|5|60|1|120|Classroom|0|
+0
