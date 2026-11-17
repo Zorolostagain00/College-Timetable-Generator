@@ -149,8 +149,6 @@ function setupEventListeners() {
             name: document.getElementById('roomName').value.trim(),
             type: document.getElementById('roomIsLab').value === '1' ? 'Laboratory' : 'Classroom',
             isLab: parseInt(document.getElementById('roomIsLab').value, 10),
-            capacity: parseInt(document.getElementById('roomCapacity').value, 10),
-            equipment: document.getElementById('roomEquipment').value.trim(),
             isAvailable: parseInt(document.getElementById('roomIsAvailable').value, 10)
         };
         const method = isEdit ? 'PUT' : 'POST';
@@ -627,7 +625,7 @@ async function loadRooms() {
     modalRoomSel.innerHTML = '';
 
     if (appState.rooms.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:#6b7280;">No facilities registered. Register classrooms or labs using the form on the left.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:24px; color:#6b7280;">No facilities registered. Register classrooms or labs using the form on the left.</td></tr>';
         modalRoomSel.innerHTML = '<option value="-1">-- No Facilities Available --</option>';
     } else {
         appState.rooms.forEach((r, idx) => {
@@ -636,8 +634,6 @@ async function loadRooms() {
                 <td><strong>${r.id}</strong></td>
                 <td>${r.name}</td>
                 <td><span class="status-pill ${r.isLab ? 'blue' : 'green'}">${r.type}</span></td>
-                <td>${r.capacity} Seats</td>
-                <td><span class="text-muted">${r.equipment || 'Standard'}</span></td>
                 <td><span class="status-pill ${r.isAvailable ? 'green' : 'warning'}">${r.isAvailable ? 'Available' : 'Blocked'}</span></td>
                 <td>
                     <div class="action-btn-group">
@@ -664,8 +660,6 @@ function editRoom(id) {
     document.getElementById('roomId').readOnly = false;
     document.getElementById('roomName').value = r.name;
     document.getElementById('roomIsLab').value = r.isLab ? '1' : '0';
-    document.getElementById('roomCapacity').value = r.capacity;
-    document.getElementById('roomEquipment').value = r.equipment || '';
     document.getElementById('roomIsAvailable').value = r.isAvailable ? '1' : '0';
     document.getElementById('btnRoomSubmit').textContent = 'Update Facility';
     document.getElementById('btnCancelRoomEdit').classList.remove('hidden');
@@ -860,66 +854,60 @@ async function executeGenerator() {
     await loadFaculty();
 }
 
-// Load Reports & Graph BFS Dependency Analysis
+// Load Reports
 async function loadReports() {
-    const res = await fetch('/api/reports');
-    const data = await res.json();
+    try {
+        const res = await fetch('/api/reports');
+        const data = await res.json();
 
-    // Faculty load bars
-    const facContainer = document.getElementById('facultyLoadBars');
-    facContainer.innerHTML = '';
-    (data.facultyWorkload || []).forEach(f => {
-        const item = document.createElement('div');
-        item.className = 'progress-item';
-        item.innerHTML = `
-            <div class="progress-item-header">
-                <span>${f.name} (${f.dept})</span>
-                <span><strong>${f.current}</strong> / ${f.max} hrs (${f.percent}%)</span>
-            </div>
-            <div class="progress-bar-bg">
-                <div class="progress-bar-fill" style="width: ${Math.min(100, f.percent)}%; ${f.percent > 90 ? 'background-color:#ea580c;' : ''}"></div>
-            </div>
-        `;
-        facContainer.appendChild(item);
-    });
+        // Faculty load bars
+        const facContainer = document.getElementById('facultyLoadBars');
+        facContainer.innerHTML = '';
+        const fList = data.facultyWorkload || [];
+        if (fList.length === 0) {
+            facContainer.innerHTML = '<p class="text-muted" style="padding:24px; text-align:center;">No registered faculty members to display.</p>';
+        } else {
+            fList.forEach(f => {
+                const item = document.createElement('div');
+                item.className = 'progress-item';
+                item.innerHTML = `
+                    <div class="progress-item-header">
+                        <span><strong>${f.name}</strong> (${f.dept})</span>
+                        <span><strong>${f.current}</strong> / ${f.max} hrs (${f.percent}%)</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" style="width: ${Math.min(100, f.percent)}%; ${f.percent > 90 ? 'background-color:#ea580c;' : ''}"></div>
+                    </div>
+                `;
+                facContainer.appendChild(item);
+            });
+        }
 
-    // Room utilization bars
-    const roomContainer = document.getElementById('roomUtilizationBars');
-    roomContainer.innerHTML = '';
-    (data.roomUtilization || []).forEach(r => {
-        const item = document.createElement('div');
-        item.className = 'progress-item';
-        item.innerHTML = `
-            <div class="progress-item-header">
-                <span>${r.name} (${r.type} • ${r.capacity} Seats)</span>
-                <span><strong>${r.used}</strong> / ${r.total} slots (${r.percent}%)</span>
-            </div>
-            <div class="progress-bar-bg">
-                <div class="progress-bar-fill" style="width: ${Math.min(100, r.percent)}%; background-color: #2563eb;"></div>
-            </div>
-        `;
-        roomContainer.appendChild(item);
-    });
-
-    // Cascade Graph BFS with Direct vs Indirect distinction
-    const cascadeTbody = document.querySelector('#cascadeTable tbody');
-    cascadeTbody.innerHTML = '';
-    (data.cascadeAnalysis || []).forEach(c => {
-        const tr = document.createElement('tr');
-        const directList = (c.direct && c.direct.length > 0)
-            ? c.direct.map(d => `<span class="status-pill green">${d}</span>`).join(' ')
-            : '<span class="text-muted">None</span>';
-        const indirectList = (c.indirect && c.indirect.length > 0)
-            ? c.indirect.map(d => `<span class="status-pill blue">${d}</span>`).join(' ')
-            : '<span class="text-muted">None</span>';
-        tr.innerHTML = `
-            <td><strong>${c.division}</strong></td>
-            <td>${directList}</td>
-            <td>${indirectList}</td>
-            <td><span class="badge-status">${c.connectedCount} Linked Divisions</span></td>
-        `;
-        cascadeTbody.appendChild(tr);
-    });
+        // Room utilization bars
+        const roomContainer = document.getElementById('roomUtilizationBars');
+        roomContainer.innerHTML = '';
+        const rList = data.roomUtilization || [];
+        if (rList.length === 0) {
+            roomContainer.innerHTML = '<p class="text-muted" style="padding:24px; text-align:center;">No classrooms or laboratories registered to display.</p>';
+        } else {
+            rList.forEach(r => {
+                const item = document.createElement('div');
+                item.className = 'progress-item';
+                item.innerHTML = `
+                    <div class="progress-item-header">
+                        <span><strong>${r.name}</strong> (${r.type})</span>
+                        <span><strong>${r.used}</strong> / ${r.total} slots (${r.percent}%)</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" style="width: ${Math.min(100, r.percent)}%; background-color: #2563eb;"></div>
+                    </div>
+                `;
+                roomContainer.appendChild(item);
+            });
+        }
+    } catch (e) {
+        console.error('Error loading reports:', e);
+    }
 }
 
 // Generic Post Helper

@@ -729,18 +729,7 @@ inline string handleReports() {
 inline string handleReset(const string& body) {
     string target = getJsonStr(body, "target");
     if (target == "sample" || target == "seed") {
-        initSampleData();
-        for (int d = 0; d < MAX_DIVS; d++)
-            for (int day = 0; day < MAX_DAYS; day++)
-                for (int s = 0; s < MAX_SLOTS; s++) grid[d][day][s] = Cell();
-        for (int b = 0; b < numBreaks; b++) {
-            if (breaks[b].day < dept.numDays && breaks[b].slot < dept.numSlots)
-                for (int d = 0; d < numDivs; d++) grid[d][breaks[b].day][breaks[b].slot] = Cell(-1, -1, -1, 1, breaks[b].name);
-        }
-        dept.lastGenerated = "Sample Data Seeded (" + getCurrentTimestamp() + ")";
-        buildFacultyGraph();
-        saveData();
-        return "{\"status\":\"success\",\"message\":\"Sample test data seeded.\"}";
+        return "{\"status\":\"success\",\"message\":\"Zero defaults mode active. No fake data seeded.\"}";
     }
     if (target == "all" || target.empty()) {
         numFac = 0;
