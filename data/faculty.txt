@@ -1,0 +1,6 @@
+5
+DS01|Mandar|CSDS|0|17|PAS|1111111|
+DS02|verma|CSDS|0|16|DSA|1111111|
+DS03|poonam|CSDS|0|12|web development|1111111|
+IT01|rajat|IT|1|13|Electronics|1111111|
+DS04|sayali|CSDS|0|18|OOPS|1111111|

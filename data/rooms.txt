@@ -1,0 +1,5 @@
+4
+DS01|abcd|Classroom|Standard|60|0|1
+DS02|abcd|Classroom|Standard|60|0|1
+DS03|abcd|Classroom|Standard|60|0|1
+DS01|abcd|Laboratory|Standard|60|1|1
