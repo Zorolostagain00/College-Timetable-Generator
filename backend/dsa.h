@@ -1,4 +1,4 @@
-#ifndef DSA_H
+#ifndef DSA_H //if not defined DSA_H define dsa_H
 #define DSA_H
 
 #include "models.h"

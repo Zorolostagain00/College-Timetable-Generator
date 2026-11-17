@@ -1,0 +1,204 @@
+# DeptFlow V2: System & Logical Architecture
+
+---
+
+## 1. High-Level System Architecture (4-Layer Model)
+
+DeptFlow V2 is structured into four decoupled layers, isolating presentation, network transport, core algorithmic scheduling, and data persistence:
+
+```mermaid
+graph TD
+    subgraph L1["Layer 1: Presentation (Browser Client)"]
+        UI["Single Page Application (SPA)<br/>HTML5 • CSS3 Matte Emerald • Vanilla JS"]
+        State["Client State & Dynamic DOM<br/>Timetable Grid, Modals, Dependency Visualizer"]
+        UI <--> State
+    end
+
+    subgraph L2["Layer 2: Communication (HTTP Server)"]
+        WS["Winsock2 TCP Socket Server<br/>Port 8080 (Non-blocking I/O Loop)"]
+        Router["HTTP REST Router & Serializer<br/>GET / POST / PUT / DELETE"]
+        WS <--> Router
+    end
+
+    subgraph L3["Layer 3: Core DSA & Scheduling Engine"]
+        Scheduler["7-Constraint Scheduling Engine<br/>Greedy Slot Allocator"]
+        Heap["Max-Heap Priority Queue<br/>Weight: Practicals (100/110) > Theory (30/55)"]
+        GraphDSA["Division Dependency Graph + BFS<br/>Direct (Shared Faculty) vs Indirect Ripple"]
+        HashDSA["17-Bucket Hash Table<br/>Polynomial Rolling Hash for Faculty O(1)"]
+        StackDSA["Undo Stack (LIFO)<br/>Atomic Session Edit Rollback"]
+        Grid3D["3D Occupancy Grid<br/>grid[division][day][slot]"]
+
+        Scheduler --> Heap
+        Scheduler --> Grid3D
+        Scheduler --> GraphDSA
+        Scheduler --> HashDSA
+        Scheduler --> StackDSA
+    end
+
+    subgraph L4["Layer 4: Storage & Persistence"]
+        FileIO["File I/O Stream Manager<br/>Line-by-line Plaintext Serialization"]
+        DataFiles[("data/*.txt Storage<br/>department, faculty, subjects, rooms, breaks, timetables")]
+        FileIO <--> DataFiles
+    end
+
+    State <== "REST JSON / HTTP (Fetch API)" ==> WS
+    Router <== "C++ Function Dispatch" ==> Scheduler
+    Scheduler <== "Data Sync / Backup" ==> FileIO
+```
+
+---
+
+## 2. Logical Architecture & Request-Response Lifecycle
+
+The lifecycle of an operation (such as adding an entity, generating a schedule, or manually moving a session) flows through an end-to-end synchronized pipeline:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User / Academic Admin
+    participant UI as Frontend SPA (app.js)
+    participant Server as Winsock Server (main.cpp)
+    participant Router as REST Dispatcher (api.h)
+    participant Engine as Scheduler & DSA (scheduler.h / dsa.h)
+    participant Storage as File Storage (storage.h)
+
+    User->>UI: Click "Generate Timetable"
+    UI->>Server: POST /api/generate {"divisions": [0, 1]}
+    Server->>Router: Parse HTTP headers & extract JSON payload
+    Router->>Engine: generateTimetable(selectedDivs)
+
+    activate Engine
+    Note over Engine: 1. Clone active grid into tempGrid<br/>2. Re-compute faculty hours for unselected divs<br/>3. Place fixed breaks<br/>4. Populate MaxHeap with weighted sessions<br/>5. Pop sessions & test 7 constraints across days/slots<br/>6. Allocate dynamic flexible breaks in windows<br/>7. Commit tempGrid -> master grid
+    Engine->>Engine: buildFacultyGraph() (Recalculate BFS dependencies)
+    Engine-->>Router: Generation complete (0 unscheduled)
+    deactivate Engine
+
+    Router->>Storage: saveTimetables()
+    Storage-->>Router: Persisted to data/timetables.txt
+    Router-->>Server: HTTP 200 OK + JSON {status: "success", unscheduled: []}
+    Server-->>UI: HTTP Response Payload
+    UI->>UI: Re-render Timetable Grid & Analytics Cards
+    UI-->>User: Visual Update & Success Toast
+```
+
+---
+
+## 3. Data Entities & Entity Relationships
+
+The core data model centers on the 3D Timetable Grid which associates five core academic resources:
+
+```mermaid
+erDiagram
+    DEPARTMENT ||--o{ DIVISION : contains
+    DEPARTMENT ||--o{ FACULTY : employs
+    DEPARTMENT ||--o{ ROOM : operates
+    DEPARTMENT ||--o{ BREAK : schedules
+    DIVISION ||--o{ SUBJECT : enrolls
+    FACULTY ||--o{ SUBJECT : teaches
+    FACULTY ||--o{ COMMITMENT : has_external
+
+    TIMETABLE_CELL }|--|| DIVISION : belongs_to
+    TIMETABLE_CELL }|--o| SUBJECT : hosts
+    TIMETABLE_CELL }|--o| FACULTY : assigned_to
+    TIMETABLE_CELL }|--o| ROOM : takes_place_in
+    TIMETABLE_CELL }|--o| BREAK : occupied_by
+
+    DEPARTMENT {
+        string name
+        string startTime
+        string endTime
+        string interval
+        int numDays
+        int numSlots
+    }
+
+    DIVISION {
+        string name
+        int yearId
+    }
+
+    FACULTY {
+        string id
+        string name
+        string dept
+        bool isOutside
+        int maxHours
+        int currHours
+        bool availDays[7]
+    }
+
+    SUBJECT {
+        string id
+        string name
+        int yearId
+        int weeklyLec
+        int practicalCount
+        int practicalDuration
+        string roomTypeReq
+    }
+
+    ROOM {
+        string id
+        string name
+        string type
+        int capacity
+        bool isLab
+        bool isAvailable
+    }
+
+    BREAK {
+        string name
+        int day
+        int slot
+        int scopeType
+        bool isFlexible
+    }
+```
+
+---
+
+## 4. The 7 Simultaneous Resource Constraints
+
+During timetable generation and manual slot reassignment, the C++ validation engine in `backend/scheduler.h` (`checkSlotFreeInGrid`) enforces 7 simultaneous constraints:
+
+1. **Boundary & Working Hours**: Session duration cannot extend past the daily operational slots ($slot + duration \le numSlots$).
+2. **Faculty Day Availability**: Faculty must be configured as available on that day (Mon–Sat bitmask).
+3. **Faculty Weekly Workload**: Assigned hours cannot exceed `faculties[f].maxHours`.
+4. **Division Collision**: The division's target slot must not already contain another lecture or break.
+5. **Faculty Double-Booking**: The assigned faculty cannot be lecturing in another division during the same day and slot.
+6. **Outside Faculty Commitments**: Visiting faculty cannot be booked during slots marked in their external commitment linked list.
+7. **Facility Matching & Availability**:
+   - Rooms must be active (`isAvailable == true`).
+   - Lab subjects must be allocated to rooms where `isLab == 1`.
+   - The room cannot be booked by another division in the same time slot.
+
+---
+
+## 5. Algorithmic Breakdown: Manual DSA Implementations
+
+Every data structure and algorithm in DeptFlow V2 is written **from scratch without STL containers** (`std::vector`, `std::map`, `std::queue`, `std::sort` are absent):
+
+| Data Structure / Algorithm       | Source File        | Implementation Details                                                           | Practical Role                                                                                                                                  |                      Time Complexity                      |         Space Complexity         |
+| :------------------------------- | :----------------- | :------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------: | :------------------------------: |
+| **Max-Heap (Priority Queue)**    | `backend/dsa.h`    | Array-based binary heap with `siftUp()` and `siftDown()` methods.                | Prioritizes sessions with high conflict probability: Outside Practicals (110) > Dept Practicals (100) > Outside Theory (55) > Dept Theory (30). | Push: $\mathcal{O}(\log N)$<br>Pop: $\mathcal{O}(\log N)$ |         $\mathcal{O}(N)$         |
+| **Adjacency Matrix Graph + BFS** | `backend/dsa.h`    | 2D matrix `adj[MAX_DIVS][MAX_DIVS]` with manual FIFO queue.                      | Traverses division network to distinguish **direct dependencies** (shared faculty edge) from **indirect transitive ripple effects**.            |                  BFS: $\mathcal{O}(V^2)$                  |        $\mathcal{O}(V^2)$        |
+| **Separate Chaining Hash Table** | `backend/dsa.h`    | 17-bucket array with polynomial rolling hash ($h = (h \cdot 31 + c) \pmod{17}$). | Provides constant-time lookup, insertion, and deletion of faculty records by alphanumeric ID.                                                   |   Average: $\mathcal{O}(1)$<br>Worst: $\mathcal{O}(N)$    |       $\mathcal{O}(B + N)$       |
+| **Singly Linked List**           | `backend/models.h` | Dynamic pointer chain `CommitNode*` attached to each visiting faculty.           | Stores external home-department blocks (day, slot) that the scheduler must avoid.                                                               |   Search: $\mathcal{O}(K)$<br>Insert: $\mathcal{O}(1)$    |         $\mathcal{O}(K)$         |
+| **Undo Stack**                   | `backend/dsa.h`    | LIFO static array with top pointer.                                              | Enables atomic rollback of manual timetable edits without full regeneration.                                                                    |      Push: $\mathcal{O}(1)$<br>Pop: $\mathcal{O}(1)$      |         $\mathcal{O}(S)$         |
+| **Insertion Sort**               | `backend/dsa.h`    | In-place comparison sort.                                                        | Chronologically sorts session records by day and time slot before sending to UI.                                                                |    Worst: $\mathcal{O}(N^2)$<br>Best: $\mathcal{O}(N)$    |         $\mathcal{O}(1)$         |
+| **Binary Search**                | `backend/dsa.h`    | Divide-and-conquer search on sorted subject list.                                | Rapid lookup of subject specifications by code.                                                                                                 |                   $\mathcal{O}(\log M)$                   |         $\mathcal{O}(1)$         |
+| **3D Occupancy Grid**            | `backend/models.h` | `grid[MAX_DIVS][MAX_DAYS][MAX_SLOTS]`                                            | Constant-time access to any division's timetable cell.                                                                                          |                 Access: $\mathcal{O}(1)$                  | $\mathcal{O}(D \cdot W \cdot S)$ |
+
+---
+
+## 6. Single Source of Truth Timing Engine
+
+DeptFlow V2 computes all schedule grids dynamically from the department configuration:
+
+$$\text{numSlots} = \left\lfloor \frac{\text{parseMinutes}(\text{endTime}) - \text{parseMinutes}(\text{startTime})}{\text{interval}} \right\rfloor$$
+
+When the department time parameters (`startTime`, `endTime`, `interval`) or working days change:
+
+1. `Department::recalculateSlots()` computes the new slot boundaries (e.g. `09:00-10:00`, `10:00-11:00`).
+2. Existing timetable grids adapt their time axes dynamically.
+3. Multi-slot practical sessions dynamically scale their required slot span based on the configured interval ($\text{pracDurSlots} = \max(1, \text{practicalDuration} / \text{interval})$).
