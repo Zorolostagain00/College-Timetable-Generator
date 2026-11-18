@@ -177,12 +177,53 @@ inline void generateTimetable(const bool selectedDivs[MAX_DIVS]) {
         }
     }
 
-    // Greedy scheduling using Max-Heap
+    // Tracking structures for balanced schedule distribution across days
+    int divLabCount[MAX_DIVS][MAX_DAYS] = {{0}};
+    int subDayCount[MAX_DIVS][MAX_SUBS][MAX_DAYS] = {{{0}}};
+    int divSlotCount[MAX_DIVS][MAX_DAYS] = {{0}};
+
+    for (int d = 0; d < numDivs; d++) {
+        for (int day = 0; day < dept.numDays; day++) {
+            for (int s = 0; s < dept.numSlots; s++) {
+                if (tempGrid[d][day][s].subIdx != -1) {
+                    divSlotCount[d][day]++;
+                    subDayCount[d][tempGrid[d][day][s].subIdx][day]++;
+                    if (tempGrid[d][day][s].label.find("[Lab]") != string::npos) divLabCount[d][day]++;
+                }
+            }
+        }
+    }
+
+    // Greedy scheduling using Max-Heap with balanced day distribution
     while (!heap.empty()) {
         Session sess = heap.pop();
         bool scheduled = false; string lastFail = "No available slot matching constraints";
         int assignedRoom = -1;
-        for (int day = 0; day < dept.numDays && !scheduled; day++) {
+
+        // Sort days to prioritize least loaded days and separate labs across days
+        int dayOrder[MAX_DAYS];
+        for (int d = 0; d < dept.numDays; d++) dayOrder[d] = d;
+
+        for (int i = 0; i < dept.numDays - 1; i++) {
+            for (int j = i + 1; j < dept.numDays; j++) {
+                int d1 = dayOrder[i], d2 = dayOrder[j];
+                int score1 = 0, score2 = 0;
+                if (sess.type == 1) { // Lab: strictly minimize labs per day, then day load
+                    score1 = divLabCount[sess.divIdx][d1] * 100 + divSlotCount[sess.divIdx][d1];
+                    score2 = divLabCount[sess.divIdx][d2] * 100 + divSlotCount[sess.divIdx][d2];
+                } else { // Lecture: avoid repeating same subject on same day, then day load
+                    score1 = subDayCount[sess.divIdx][sess.subIdx][d1] * 50 + divSlotCount[sess.divIdx][d1];
+                    score2 = subDayCount[sess.divIdx][sess.subIdx][d2] * 50 + divSlotCount[sess.divIdx][d2];
+                }
+                if (score1 > score2) {
+                    dayOrder[i] = d2;
+                    dayOrder[j] = d1;
+                }
+            }
+        }
+
+        for (int di = 0; di < dept.numDays && !scheduled; di++) {
+            int day = dayOrder[di];
             for (int slot = 0; slot <= dept.numSlots - sess.duration && !scheduled; slot++) {
                 if (checkSlotFreeInGrid(tempGrid, sess.divIdx, day, slot, sess.duration, sess.facIdx, sess.type == 1, assignedRoom, lastFail)) {
                     for (int dur = 0; dur < sess.duration; dur++) {
@@ -193,6 +234,9 @@ inline void generateTimetable(const bool selectedDivs[MAX_DIVS]) {
                         int hoursToAdd = max(1, (sess.duration * intM) / 60);
                         faculties[sess.facIdx].currHours += hoursToAdd;
                     }
+                    if (sess.type == 1) divLabCount[sess.divIdx][day]++;
+                    subDayCount[sess.divIdx][sess.subIdx][day]++;
+                    divSlotCount[sess.divIdx][day] += sess.duration;
                     scheduled = true;
                 }
             }

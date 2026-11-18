@@ -24,6 +24,55 @@ inline void initDefaultData() {
             for (int s = 0; s < MAX_SLOTS; s++) grid[d][day][s] = Cell();
 }
 
+inline void initSampleData() {
+    dept = Department();
+    numDivs = 0;
+    string divNames[] = {"FE-A", "FE-B", "SE-A", "SE-B", "TE-A", "BE-A"};
+    int divYears[] = {1, 1, 2, 2, 3, 4};
+    for (int i = 0; i < 6; i++) divisions[numDivs++] = Division(divNames[i], divYears[i]);
+
+    numFac = 0;
+    faculties[numFac++] = Faculty("F01", "Prof. R. Sharma", "CSDS", false, 16, 0, "Engg Math, Cloud Computing");
+    faculties[numFac++] = Faculty("F02", "Prof. A. Verma", "CSDS", false, 16, 0, "C Programming, Data Structures");
+    faculties[numFac++] = Faculty("F03", "Prof. S. Patil", "CSDS", false, 14, 0, "Computer Org, DBMS");
+
+    Faculty f4("F04", "Prof. N. Kulkarni", "IT", true, 10, 0, "Web Tech");
+    f4.commitments = new CommitNode(0, 0, new CommitNode(0, 1, new CommitNode(2, 2)));
+    faculties[numFac++] = f4;
+
+    Faculty f5("F05", "Prof. P. Deshmukh", "AI&DS", true, 8, 0, "AI & ML");
+    f5.commitments = new CommitNode(1, 3, new CommitNode(4, 0));
+    faculties[numFac++] = f5;
+
+    faculties[numFac++] = Faculty("F06", "Prof. M. Kadam", "CSDS", false, 14, 0, "Operating Systems");
+
+    for (int i = 0; i < numFac; i++) facHash.insert(faculties[i].id, i);
+
+    numRooms = 0;
+    rooms[numRooms++] = Room("R101", "Room 101", "Classroom", 60, 0, "Smart Board, Projector", true);
+    rooms[numRooms++] = Room("R102", "Room 102", "Classroom", 60, 0, "Audio System, Projector", true);
+    rooms[numRooms++] = Room("R103", "Room 103", "Classroom", 60, 0, "Standard AV", true);
+    rooms[numRooms++] = Room("L201", "Software Lab 1", "Laboratory", 30, 1, "30 High-End Workstations", true);
+    rooms[numRooms++] = Room("L202", "Computing Lab 2", "Laboratory", 30, 1, "30 GPU PCs, Dual Monitors", true);
+    rooms[numRooms++] = Room("L203", "IoT & Embedded Lab", "Laboratory", 25, 1, "Microcontroller Testbenches", true);
+
+    numSubs = 0;
+    subjects[numSubs++] = Subject("S101", "Engg Math", 1, 0, 3, 60, 0, 0, "Classroom");
+    subjects[numSubs++] = Subject("S102", "C Programming", 1, 1, 3, 60, 1, 120, "Laboratory");
+    subjects[numSubs++] = Subject("S201", "Data Structures", 2, 1, 3, 60, 1, 120, "Laboratory");
+    subjects[numSubs++] = Subject("S202", "Computer Org", 2, 2, 3, 60, 0, 0, "Classroom");
+    subjects[numSubs++] = Subject("S203", "Operating Systems", 2, 5, 3, 60, 1, 120, "Laboratory");
+    subjects[numSubs++] = Subject("S301", "Web Tech", 3, 3, 2, 60, 1, 120, "Laboratory");
+    subjects[numSubs++] = Subject("S302", "DBMS", 3, 2, 3, 60, 0, 0, "Classroom");
+    subjects[numSubs++] = Subject("S401", "AI & ML", 4, 4, 2, 60, 0, 0, "Classroom");
+    subjects[numSubs++] = Subject("S402", "Cloud Computing", 4, 0, 3, 60, 0, 0, "Classroom");
+
+    numBreaks = 0;
+    for (int d = 0; d < dept.numDays; d++) {
+        breaks[numBreaks++] = Break("Lunch Break", d, 3, 0, 0, false, 1, 3, 3);
+    }
+}
+
 inline void saveData() {
     ofstream fd("data/department.txt");
     if (fd) {

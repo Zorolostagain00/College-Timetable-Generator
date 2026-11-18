@@ -77,6 +77,20 @@ inline string handleConfig(const string& method, const string& body) {
     return ss.str();
 }
 
+inline int parseDayIndex(const string& str) {
+    string s = str;
+    for (char &c : s) c = tolower(c);
+    if (s.find("mon") != string::npos) return 0;
+    if (s.find("tue") != string::npos) return 1;
+    if (s.find("wed") != string::npos) return 2;
+    if (s.find("thu") != string::npos) return 3;
+    if (s.find("fri") != string::npos) return 4;
+    if (s.find("sat") != string::npos) return 5;
+    if (s.find("sun") != string::npos) return 6;
+    for (char c : s) if (isdigit(c)) return (c - '0');
+    return -1;
+}
+
 inline string handleFaculty(const string& method, const string& body) {
     if (method == "POST") {
         string id = getJsonStr(body, "id"), name = getJsonStr(body, "name"), dep = getJsonStr(body, "dept");
@@ -95,7 +109,7 @@ inline string handleFaculty(const string& method, const string& body) {
                     string arr = body.substr(bStart + 1, bEnd - (bStart + 1));
                     stringstream ss(arr); string dVal;
                     while (getline(ss, dVal, ',')) {
-                        int dayNum = atoi(dVal.c_str());
+                        int dayNum = parseDayIndex(dVal);
                         if (dayNum >= 0 && dayNum < MAX_DAYS) faculties[numFac].availDays[dayNum] = true;
                     }
                 }
@@ -144,7 +158,7 @@ inline string handleFaculty(const string& method, const string& body) {
                     string arr = body.substr(bStart + 1, bEnd - (bStart + 1));
                     stringstream ss(arr); string dVal;
                     while (getline(ss, dVal, ',')) {
-                        int dayNum = atoi(dVal.c_str());
+                        int dayNum = parseDayIndex(dVal);
                         if (dayNum >= 0 && dayNum < MAX_DAYS) faculties[idx].availDays[dayNum] = true;
                     }
                 }
@@ -729,7 +743,18 @@ inline string handleReports() {
 inline string handleReset(const string& body) {
     string target = getJsonStr(body, "target");
     if (target == "sample" || target == "seed") {
-        return "{\"status\":\"success\",\"message\":\"Zero defaults mode active. No fake data seeded.\"}";
+        initSampleData();
+        for (int d = 0; d < MAX_DIVS; d++)
+            for (int day = 0; day < MAX_DAYS; day++)
+                for (int s = 0; s < MAX_SLOTS; s++) grid[d][day][s] = Cell();
+        for (int b = 0; b < numBreaks; b++) {
+            if (breaks[b].day < dept.numDays && breaks[b].slot < dept.numSlots)
+                for (int d = 0; d < numDivs; d++) grid[d][breaks[b].day][breaks[b].slot] = Cell(-1, -1, -1, 1, breaks[b].name);
+        }
+        dept.lastGenerated = "Sample Benchmark Seeded (" + getCurrentTimestamp() + ")";
+        buildFacultyGraph();
+        saveData();
+        return "{\"status\":\"success\",\"message\":\"Sample test benchmark seeded.\"}";
     }
     if (target == "all" || target.empty()) {
         numFac = 0;
