@@ -25,6 +25,7 @@ inline string getCurrentTimestamp() {
     return string(buf);
 }
 
+// build graph edges where divisions share at least one faculty
 inline void buildFacultyGraph() {
     divGraph = Graph();
     for (int i = 0; i < numDivs; i++) {
@@ -57,28 +58,38 @@ inline void buildFacultyGraph() {
     }
 }
 
+// checks the 7 hard constraints before placing any session
 inline bool checkSlotFreeInGrid(const Cell targetGrid[MAX_DIVS][MAX_DAYS][MAX_SLOTS],
                                int divIdx, int day, int slot, int dur, int facIdx,
                                bool needLab, int& assignedRoom, string& reason) {
+    // 1. session must fit within working hours
     if (slot + dur > dept.numSlots) { reason = "Session exceeds daily working hours"; return false; }
+
     if (facIdx >= 0) {
+        // 2. faculty must be available on this day
         if (!faculties[facIdx].availDays[day]) { reason = "Faculty unavailable on this working day"; return false; }
         int intM = atoi(dept.interval.c_str()); if (intM <= 0) intM = 60;
         int hoursToAdd = max(1, (dur * intM) / 60);
+
+        // 3. faculty workload limit
         if (faculties[facIdx].currHours + hoursToAdd > faculties[facIdx].maxHours) {
             reason = "Faculty weekly workload capacity exceeded"; return false;
         }
     }
+
     for (int s = slot; s < slot + dur; s++) {
+        // 4. slot must be empty and not a break
         if (targetGrid[divIdx][day][s].subIdx != -1 || targetGrid[divIdx][day][s].isBreak) {
             reason = "Division slot or scheduled break collision"; return false;
         }
         if (facIdx >= 0) {
+            // 5. faculty must not be booked in another division
             for (int d = 0; d < numDivs; d++) {
                 if (targetGrid[d][day][s].facIdx == facIdx) {
                     reason = "Faculty already lecturing in another division"; return false;
                 }
             }
+            // 6. traverse linked list for outside commitments
             for (CommitNode* c = faculties[facIdx].commitments; c; c = c->next) {
                 if (c->day == day && c->slot == s) {
                     reason = "Outside faculty home department commitment clash"; return false;
@@ -86,6 +97,8 @@ inline bool checkSlotFreeInGrid(const Cell targetGrid[MAX_DIVS][MAX_DAYS][MAX_SL
             }
         }
     }
+
+    // 7. room allocation
     assignedRoom = -1;
     for (int r = 0; r < numRooms; r++) {
         if (!rooms[r].isAvailable) continue;
@@ -106,10 +119,12 @@ inline bool checkSlotFreeInGrid(const Cell targetGrid[MAX_DIVS][MAX_DAYS][MAX_SL
     return true;
 }
 
+// timetable generation engine
 inline void generateTimetable(const bool selectedDivs[MAX_DIVS]) {
     numUnsched = 0;
     int intM = atoi(dept.interval.c_str()); if (intM <= 0) intM = 60;
 
+    // copy unselected divisions to temp grid to keep existing schedules intact
     Cell tempGrid[MAX_DIVS][MAX_DAYS][MAX_SLOTS];
     for (int d = 0; d < numDivs; d++) {
         for (int day = 0; day < dept.numDays; day++) {
@@ -119,7 +134,7 @@ inline void generateTimetable(const bool selectedDivs[MAX_DIVS]) {
         }
     }
 
-    // Recalculate faculty hours for unselected divisions
+    // recalculate faculty hours for unselected divisions
     for (int f = 0; f < numFac; f++) {
         faculties[f].currHours = 0;
         for (int d = 0; d < numDivs; d++) {
@@ -134,7 +149,7 @@ inline void generateTimetable(const bool selectedDivs[MAX_DIVS]) {
         }
     }
 
-    // Place fixed breaks first
+    // place fixed breaks first
     for (int b = 0; b < numBreaks; b++) {
         if (breaks[b].isFlexible) continue;
         for (int d = 0; d < numDivs; d++) {
@@ -148,7 +163,7 @@ inline void generateTimetable(const bool selectedDivs[MAX_DIVS]) {
         }
     }
 
-    // Build Heap of teaching sessions
+    // build max-heap: sessions with higher constraint rigidity get higher priority
     MaxHeap heap;
     for (int d = 0; d < numDivs; d++) {
         if (!selectedDivs[d]) continue;
@@ -169,6 +184,7 @@ inline void generateTimetable(const bool selectedDivs[MAX_DIVS]) {
             int pracDurSlots = max(1, subjects[s].practicalDuration / intM);
             int lecDurSlots = max(1, subjects[s].lecDuration / intM);
 
+            // push practicals (priority 100-110) and lectures (priority 30-55)
             for (int p = 0; p < subjects[s].practicalCount; p++)
                 heap.push(Session(s, d, pFac, 1, pracDurSlots, pOut ? 110 : 100));
 
@@ -241,13 +257,14 @@ inline void generateTimetable(const bool selectedDivs[MAX_DIVS]) {
                 }
             }
         }
+        // record unscheduled session if constraints couldn't be satisfied
         if (!scheduled && numUnsched < MAX_SESS) {
             string tag = sess.type == 1 ? " [Practical]" : " [Theory]";
             unscheduled[numUnsched++] = UnscheduledInfo{subjects[sess.subIdx].name + tag, divisions[sess.divIdx].name, lastFail};
         }
     }
 
-    // Place flexible breaks in available windows
+    // place flexible breaks in available windows
     for (int b = 0; b < numBreaks; b++) {
         if (!breaks[b].isFlexible) continue;
         for (int d = 0; d < numDivs; d++) {
@@ -270,7 +287,7 @@ inline void generateTimetable(const bool selectedDivs[MAX_DIVS]) {
         }
     }
 
-    // Validation passed: commit temporary memory into primary grid
+    // commit temp grid to primary grid
     for (int d = 0; d < numDivs; d++) {
         for (int day = 0; day < dept.numDays; day++) {
             for (int s = 0; s < dept.numSlots; s++) {
@@ -279,7 +296,7 @@ inline void generateTimetable(const bool selectedDivs[MAX_DIVS]) {
         }
     }
     dept.lastGenerated = getCurrentTimestamp();
-    buildFacultyGraph();
+    buildFacultyGraph(); // rebuild cascade graph
 }
 
 #endif

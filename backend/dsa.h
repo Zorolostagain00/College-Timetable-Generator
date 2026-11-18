@@ -3,14 +3,18 @@
 
 #include "models.h"
 
+// node for separate chaining collision resolution
 struct HashNode {
     string key; int val; HashNode* next;
     HashNode(string k, int v, HashNode* n = nullptr) : key(k), val(v), next(n) {}
 };
 
+// custom hash table for fast faculty ID lookups - O(1) avg
 class FacultyHash {
-    static const int BUCKETS = 17;
+    static const int BUCKETS = 17; // prime bucket count
     HashNode* table[BUCKETS];
+
+    // polynomial rolling hash (base 31)
     int hash(const string& s) {
         unsigned long h = 0;
         for (char c : s) h = (h * 31 + c) % BUCKETS;
@@ -18,10 +22,13 @@ class FacultyHash {
     }
 public:
     FacultyHash() { for (int i = 0; i < BUCKETS; i++) table[i] = nullptr; }
+
+    // head insertion - O(1)
     void insert(const string& k, int v) {
         int idx = hash(k);
         table[idx] = new HashNode(k, v, table[idx]);
     }
+
     int search(const string& k) {
         int idx = hash(k);
         HashNode* curr = table[idx];
@@ -31,6 +38,7 @@ public:
         }
         return -1;
     }
+
     void remove(const string& k) {
         int idx = hash(k);
         HashNode* curr = table[idx]; HashNode* prev = nullptr;
@@ -45,21 +53,28 @@ public:
     }
 };
 
+// session unit pushed into priority queue for scheduling
 struct Session {
     int subIdx, divIdx, facIdx, type, duration, priority;
     Session(int s = -1, int di = -1, int f = -1, int t = 0, int dur = 1, int p = 30)
         : subIdx(s), divIdx(di), facIdx(f), type(t), duration(dur), priority(p) {}
 };
 
+// max-heap priority queue: schedules high-constraint sessions first (labs, visiting faculty)
 class MaxHeap {
     Session heap[MAX_SESS];
     int count;
+
     void swapS(int a, int b) { Session t = heap[a]; heap[a] = heap[b]; heap[b] = t; }
+
+    // bubble up newly added session
     void siftUp(int i) {
         while (i > 0 && heap[i].priority > heap[(i - 1) / 2].priority) {
             swapS(i, (i - 1) / 2); i = (i - 1) / 2;
         }
     }
+
+    // push down after pop to maintain max-heap property
     void siftDown(int i) {
         int maxI = i, l = 2 * i + 1, r = 2 * i + 2;
         if (l < count && heap[l].priority > heap[maxI].priority) maxI = l;
@@ -74,12 +89,15 @@ public:
     int size() const { return count; }
 };
 
+// undirected graph: edge exists if two divisions share faculty
 class Graph {
-    int adj[MAX_DIVS][MAX_DIVS];
+    int adj[MAX_DIVS][MAX_DIVS]; // adjacency matrix
 public:
     Graph() { for (int i = 0; i < MAX_DIVS; i++) for (int j = 0; j < MAX_DIVS; j++) adj[i][j] = 0; }
     void addEdge(int u, int v) { if (u < MAX_DIVS && v < MAX_DIVS) { adj[u][v] = 1; adj[v][u] = 1; } }
     bool isDirect(int u, int v) const { return (u < MAX_DIVS && v < MAX_DIVS) ? (adj[u][v] == 1) : false; }
+
+    // BFS level-order traversal: finds direct (dist 1) vs indirect (dist > 1) cascade
     void bfs(int start, int n, int* visitedOrder, int& orderCount, bool* directFlags) {
         bool visited[MAX_DIVS] = {false};
         int queue[MAX_DIVS], front = 0, rear = 0;
@@ -101,6 +119,7 @@ public:
     }
 };
 
+// LIFO stack for undoing manual grid changes
 class UndoStack {
     TimetableEntry data[MAX_SESS]; int topIdx;
 public:
@@ -111,6 +130,7 @@ public:
     int size() const { return topIdx + 1; }
 };
 
+// sort session entries chronologically by day and slot
 inline void insertionSortSessions(TimetableEntry arr[], int n) {
     for (int i = 1; i < n; i++) {
         TimetableEntry key = arr[i]; int j = i - 1;
@@ -121,11 +141,13 @@ inline void insertionSortSessions(TimetableEntry arr[], int n) {
     }
 }
 
+// linear search for faculty
 inline int findFaculty(const Faculty facs[], int n, const string& id) {
     for (int i = 0; i < n; i++) if (facs[i].id == id) return i;
     return -1;
 }
 
+// binary search for subject code
 inline int binarySearchSubject(const Subject subs[], int n, const string& id) {
     int low = 0, high = n - 1;
     while (low <= high) {
